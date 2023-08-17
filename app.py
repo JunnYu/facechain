@@ -1,6 +1,8 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import enum
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "5"
+
 import shutil
 import sys
 import time
@@ -9,7 +11,7 @@ from concurrent.futures import ThreadPoolExecutor
 import cv2
 import gradio as gr
 import numpy as np
-import torch
+import paddle
 
 from facechain.inference import GenPortrait
 from facechain.train_text_to_image_lora import prepare_dataset, data_process_fn
@@ -45,14 +47,19 @@ def concatenate_images(images):
     return concatenated_image
 
 
-def train_lora_fn(foundation_model_path=None, revision=None, output_img_dir=None, work_dir=None):
-    os.system(f'PYTHONPATH=. accelerate launch facechain/train_text_to_image_lora.py --pretrained_model_name_or_path={foundation_model_path} '
-              f'--revision={revision} --sub_path="film/film" '
+def train_lora_fn_new(foundation_model_path=None, revision=None, output_img_dir=None, work_dir=None):
+    os.system(f'PYTHONPATH=. python facechain/train_text_to_image_lora.py --pretrained_model_name_or_path={foundation_model_path} '
+              f'--output_dataset_name={output_img_dir} --caption_column="text" --resolution=512 '
+              f'--random_flip --train_batch_size=1 --num_train_epochs=200 --checkpointing_steps=5000 '
+              f'--learning_rate=1e-04 --lr_scheduler="cosine" --lr_warmup_steps=0 --seed=42 --output_dir={work_dir} '
+              f'--lora_r=32 --lora_alpha=32 --lora_text_encoder_r=32 --lora_text_encoder_alpha=32 --train_text_encoder ')
+    
+def train_lora_fn_old(foundation_model_path=None, revision=None, output_img_dir=None, work_dir=None):
+    os.system(f'PYTHONPATH=. python facechain/train_text_to_image_lora_old.py --pretrained_model_name_or_path={foundation_model_path} '
               f'--output_dataset_name={output_img_dir} --caption_column="text" --resolution=512 '
               f'--random_flip --train_batch_size=1 --num_train_epochs=200 --checkpointing_steps=5000 '
               f'--learning_rate=1e-04 --lr_scheduler="cosine" --lr_warmup_steps=0 --seed=42 --output_dir={work_dir} '
               f'--lora_r=32 --lora_alpha=32 --lora_text_encoder_r=32 --lora_text_encoder_alpha=32')
-
 
 def launch_pipeline(uuid,
                     user_models,
@@ -75,9 +82,9 @@ def launch_pipeline(uuid,
     use_stylization = False
 
     output_model_name = 'personalizaition_lora'
-    instance_data_dir = os.path.join('/tmp', uuid, 'training_data', output_model_name)
+    instance_data_dir = os.path.join('./base_root', uuid, 'training_data', output_model_name)
 
-    lora_model_path = f'/tmp/{uuid}/{output_model_name}'
+    lora_model_path = f'./base_root/{uuid}/{output_model_name}'
 
     gen_portrait = GenPortrait(use_main_model, use_face_swap, use_post_process,
                                use_stylization)
@@ -119,7 +126,7 @@ class Trainer:
             instance_images: list,
     ) -> str:
 
-        if not torch.cuda.is_available():
+        if not paddle.is_compiled_with_cuda():
             raise gr.Error('CUDA is not available.')
         if instance_images is None:
             raise gr.Error('您需要上传训练图片！')
@@ -135,12 +142,12 @@ class Trainer:
         output_model_name = 'personalizaition_lora'
 
         # mv user upload data to target dir
-        instance_data_dir = os.path.join('/tmp', uuid, 'training_data', output_model_name)
+        instance_data_dir = os.path.join('./base_root', uuid, 'training_data', output_model_name)
         print("--------uuid: ", uuid)
 
-        if not os.path.exists(f"/tmp/{uuid}"):
-            os.makedirs(f"/tmp/{uuid}")
-        work_dir = f"/tmp/{uuid}/{output_model_name}"
+        if not os.path.exists(f"./base_root/{uuid}"):
+            os.makedirs(f"./base_root/{uuid}")
+        work_dir = f"./base_root/{uuid}/{output_model_name}"
         print("----------work_dir: ", work_dir)
         shutil.rmtree(work_dir, ignore_errors=True)
         shutil.rmtree(instance_data_dir, ignore_errors=True)
@@ -149,7 +156,7 @@ class Trainer:
         data_process_fn(instance_data_dir, True)
 
         # train lora
-        train_lora_fn(foundation_model_path='ly261666/cv_portrait_model',
+        train_lora_fn_old(foundation_model_path='ly261666/cv_portrait_model',
                       revision='v2.0',
                       output_img_dir=instance_data_dir,
                       work_dir=work_dir)
@@ -160,7 +167,7 @@ class Trainer:
 
 
 def flash_model_list(uuid):
-    folder_path = f"/tmp/{uuid}"
+    folder_path = f"./base_root/{uuid}"
     folder_list = []
     print("------flash_model_list folder_path: ", folder_path)
     if not os.path.exists(folder_path):
@@ -170,7 +177,7 @@ def flash_model_list(uuid):
         for file in files:
             file_path = os.path.join(folder_path, file)
             if os.path.isdir(folder_path):
-                file_lora_path = f"{file_path}/output/pytorch_lora_weights.bin"
+                file_lora_path = f"{file_path}/output/paddle_lora_weights.pdparams"
                 if os.path.exists(file_lora_path):
                     folder_list.append(file)
 
@@ -272,4 +279,4 @@ with gr.Blocks(css='style.css') as demo:
 
 # demo.queue(max_size=100).launch(share=False)
 # demo.queue(concurrency_count=20).launch(share=False)
-demo.queue(status_update_rate=1).launch(share=True)
+demo.queue(status_update_rate=1).launch(share=False, server_name="0.0.0.0", server_port =8041)
