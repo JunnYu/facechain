@@ -175,10 +175,10 @@ def launch_pipeline(uuid,
     use_stylization = False
 
     output_model_name = 'personalization_lora'
-    instance_data_dir = os.path.join('/tmp', uuid, 'training_data', output_model_name)
-    lora_model_path = f'/tmp/{uuid}/{output_model_name}/ensemble'
+    instance_data_dir = os.path.join('./tmp', uuid, 'training_data', output_model_name)
+    lora_model_path = f'./tmp/{uuid}/{output_model_name}/ensemble'
     if not os.path.exists(lora_model_path):
-        lora_model_path = f'/tmp/{uuid}/{output_model_name}/'
+        lora_model_path = f'./tmp/{uuid}/{output_model_name}/'
 
     train_file = os.path.join(lora_model_path, 'pytorch_lora_weights.bin')
     if not os.path.exists(train_file):
@@ -244,12 +244,12 @@ def launch_pipeline_inpaint(uuid,
 
     base_model = 'ly261666/cv_portrait_model'
     output_model_name = 'personalization_lora'
-    instance_data_dir = os.path.join('/tmp', uuid, 'training_data', output_model_name)
+    instance_data_dir = os.path.join('./tmp', uuid, 'training_data', output_model_name)
 
     # we use ensemble model, if not exists fallback to original lora
-    lora_model_path = f'/tmp/{uuid}/{output_model_name}/ensemble/'
+    lora_model_path = f'./tmp/{uuid}/{output_model_name}/ensemble/'
     if not os.path.exists(lora_model_path):
-        lora_model_path = f'/tmp/{uuid}/{output_model_name}/'
+        lora_model_path = f'./tmp/{uuid}/{output_model_name}/'
 
     gen_portrait_inpaint = GenPortraitInpaint(crop_template=False, short_side_resize=512)
 
@@ -318,12 +318,12 @@ class Trainer:
         output_model_name = 'personalization_lora'
 
         # mv user upload data to target dir
-        instance_data_dir = os.path.join('/tmp', uuid, 'training_data', output_model_name)
+        instance_data_dir = os.path.join('./tmp', uuid, 'training_data', output_model_name)
         print("--------uuid: ", uuid)
 
-        if not os.path.exists(f"/tmp/{uuid}"):
-            os.makedirs(f"/tmp/{uuid}")
-        work_dir = f"/tmp/{uuid}/{output_model_name}"
+        if not os.path.exists(f"./tmp/{uuid}"):
+            os.makedirs(f"./tmp/{uuid}")
+        work_dir = f"./tmp/{uuid}/{output_model_name}"
         print("----------work_dir: ", work_dir)
         shutil.rmtree(work_dir, ignore_errors=True)
         shutil.rmtree(instance_data_dir, ignore_errors=True)
@@ -347,7 +347,7 @@ class Trainer:
 
 
 def flash_model_list(uuid):
-    folder_path = f"/tmp/{uuid}"
+    folder_path = f"./tmp/{uuid}"
     folder_list = []
     print("------flash_model_list folder_path: ", folder_path)
     if not os.path.exists(folder_path):
