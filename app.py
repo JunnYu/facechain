@@ -193,10 +193,10 @@ def launch_pipeline(uuid,
     use_post_process = True
     use_stylization = False
 
-    instance_data_dir = os.path.join('/tmp', uuid, 'training_data', base_model, user_model)
-    lora_model_path = f'/tmp/{uuid}/{base_model}/{user_model}/ensemble'
+    instance_data_dir = os.path.join('./tmp', uuid, 'training_data', base_model, user_model)
+    lora_model_path = f'./tmp/{uuid}/{base_model}/{user_model}/ensemble'
     if not os.path.exists(lora_model_path):
-        lora_model_path = f'/tmp/{uuid}/{base_model}/{user_model}/'
+        lora_model_path = f'./tmp/{uuid}/{base_model}/{user_model}/'
 
     train_file = os.path.join(lora_model_path, 'pytorch_lora_weights.bin')
     if not os.path.exists(train_file):
@@ -274,12 +274,12 @@ def launch_pipeline_inpaint(uuid,
     revision = base_models[base_model_index]['revision']
     sub_path = base_models[base_model_index]['sub_path']
     output_model_name = 'personalization_lora'
-    instance_data_dir = os.path.join('/tmp', uuid, 'training_data', base_model, user_model)
+    instance_data_dir = os.path.join('./tmp', uuid, 'training_data', base_model, user_model)
 
     # we use ensemble model, if not exists fallback to original lora
-    lora_model_path = f'/tmp/{uuid}/{base_model}/{user_model}/ensemble/'
+    lora_model_path = f'./tmp/{uuid}/{base_model}/{user_model}/ensemble/'
     if not os.path.exists(lora_model_path):
-        lora_model_path = f'/tmp/{uuid}/{base_model}/{user_model}/'
+        lora_model_path = f'./tmp/{uuid}/{base_model}/{user_model}/'
 
     gen_portrait_inpaint = GenPortraitInpaint(crop_template=False, short_side_resize=512)
     
@@ -358,12 +358,12 @@ class Trainer:
         output_model_name = slugify.slugify(output_model_name)
 
         # mv user upload data to target dir
-        instance_data_dir = os.path.join('/tmp', uuid, 'training_data', base_model_path, output_model_name)
+        instance_data_dir = os.path.join('./tmp', uuid, 'training_data', base_model_path, output_model_name)
         print("--------uuid: ", uuid)
 
-        if not os.path.exists(f"/tmp/{uuid}"):
-            os.makedirs(f"/tmp/{uuid}")
-        work_dir = f"/tmp/{uuid}/{base_model_path}/{output_model_name}"
+        if not os.path.exists(f"./tmp/{uuid}"):
+            os.makedirs(f"./tmp/{uuid}")
+        work_dir = f"./tmp/{uuid}/{base_model_path}/{output_model_name}"
 
         if os.path.exists(work_dir):
             raise gr.Error("产出模型名称已存在。")
@@ -401,7 +401,7 @@ def flash_model_list(uuid, base_model_index):
         else:
             uuid = 'qw'
 
-    folder_path = f"/tmp/{uuid}/{base_model_path}"
+    folder_path = f"./tmp/{uuid}/{base_model_path}"
     folder_list = []
     if not os.path.exists(folder_path):
         return gr.Radio.update(choices=[]),gr.Dropdown.update(choices=style_list)
@@ -430,7 +430,7 @@ def update_output_model(uuid, base_model_index):
         else:
             uuid = 'qw'
 
-    folder_path = f"/tmp/{uuid}/{base_model_path}"
+    folder_path = f"./tmp/{uuid}/{base_model_path}"
     folder_list = []
     if not os.path.exists(folder_path):
         return gr.Radio.update(choices=[]),gr.Dropdown.update(choices=style_list)
