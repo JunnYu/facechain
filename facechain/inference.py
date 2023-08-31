@@ -118,7 +118,7 @@ def main_diffusion_inference(pos_prompt, neg_prompt,
         model_dir = snapshot_download('Cherrytest/zjz_mj_jiyi_small_addtxt_fromleo', revision='v1.0.0')
         style_model_path = os.path.join(model_dir, 'zjz_mj_jiyi_small_addtxt_fromleo.safetensors')
 
-    pipe = StableDiffusionPipeline.from_pretrained(base_model_path, torch_dtype=torch.float32)
+    pipe = StableDiffusionPipeline.from_pretrained(base_model_path, torch_dtype=torch.float16)
     lora_style_path = style_model_path
     lora_human_path = lora_model_path
     pipe = merge_lora(pipe, lora_style_path, multiplier_style, from_safetensor=True)
@@ -184,8 +184,8 @@ def main_diffusion_inference_pose(pose_model_path, pose_image,
         model_dir = snapshot_download('Cherrytest/zjz_mj_jiyi_small_addtxt_fromleo', revision='v1.0.0')
         style_model_path = os.path.join(model_dir, 'zjz_mj_jiyi_small_addtxt_fromleo.safetensors')
 
-    controlnet = ControlNetModel.from_pretrained(pose_model_path, torch_dtype=torch.float32)
-    pipe = StableDiffusionControlNetPipeline.from_pretrained(base_model_path, safety_checker=None, controlnet=controlnet, torch_dtype=torch.float32)
+    controlnet = ControlNetModel.from_pretrained(pose_model_path, torch_dtype=torch.float16)
+    pipe = StableDiffusionControlNetPipeline.from_pretrained(base_model_path, safety_checker=None, controlnet=controlnet, torch_dtype=torch.float16)
     pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
     pose_im = Image.open(pose_image)
     pose_im = img_pad(pose_im)
@@ -261,10 +261,10 @@ def main_diffusion_inference_multi(pose_model_path, pose_image,
 
     model_dir = snapshot_download('damo/face_chain_control_model', revision='v1.0.1')
     controlnet = [
-        ControlNetModel.from_pretrained(pose_model_path, torch_dtype=torch.float32),
-        ControlNetModel.from_pretrained(os.path.join(model_dir, 'model_controlnet/control_v11p_sd15_depth'), torch_dtype=torch.float32)
+        ControlNetModel.from_pretrained(pose_model_path, torch_dtype=torch.float16),
+        ControlNetModel.from_pretrained(os.path.join(model_dir, 'model_controlnet/control_v11p_sd15_depth'), torch_dtype=torch.float16)
     ]
-    pipe = StableDiffusionControlNetPipeline.from_pretrained(base_model_path, controlnet=controlnet, torch_dtype=torch.float32)
+    pipe = StableDiffusionControlNetPipeline.from_pretrained(base_model_path, controlnet=controlnet, torch_dtype=torch.float16)
     pipe.scheduler = UniPCMultistepScheduler.from_config(pipe.scheduler.config)
     pose_image = Image.open(pose_image)
     pose_image = img_pad(pose_image)

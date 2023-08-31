@@ -66,9 +66,13 @@ def merge_lora(pipeline, lora_path, multiplier, from_safetensor=False, device='c
 
         curr_layer.weight.data = curr_layer.weight.data.to(device)
         if len(weight_up.shape) == 4:
-            curr_layer.weight.data += multiplier * alpha * torch.mm(weight_up.squeeze(3).squeeze(2),
-                                                                    weight_down.squeeze(3).squeeze(2)).unsqueeze(
-                2).unsqueeze(3)
+            if list(weight_down.shape[2:4]) == [1, 1]:
+                curr_layer.weight.data += multiplier * alpha * torch.mm(weight_up.squeeze(3).squeeze(2),
+                                                                        weight_down.squeeze(3).squeeze(2)).unsqueeze(
+                    2).unsqueeze(3)
+            else:
+                curr_layer.weight.data += multiplier * alpha * torch.nn.functional.conv2d(
+                    weight_down.permute([1, 0, 2, 3]), weight_up).permute([1, 0, 2, 3])
         else:
             curr_layer.weight.data += multiplier * alpha * torch.mm(weight_up, weight_down)
 
