@@ -50,7 +50,7 @@ def get_popular_prompts(train_img_dir):
     attr_idx = np.argmax(cnts_trigger)
     trigger_styles = ['a boy, children, ', 'a girl, children, ', 'a handsome man, ', 'a beautiful woman, ',
                     'a mature man, ', 'a mature woman, ']
-    trigger_style = 'sks, ' + trigger_styles[attr_idx]
+    trigger_style = '<fcsks>, ' + trigger_styles[attr_idx]
 
     if attr_idx == 2 or attr_idx == 4:
         neg_prompt += ', children'
@@ -531,7 +531,7 @@ class Blipv2():
         for i in range(len(result_list)):
             generated_text = ", ".join(result_list[i])
             print(imgs_list[i], generated_text)
-            info_dict = {"file_name": imgs_list[i], "text": "sks, " + generated_text}
+            info_dict = {"file_name": imgs_list[i], "text": "<fcsks>, " + generated_text}
             fo.write(json.dumps(info_dict) + '\n')
         fo.close()
         return out_json_name

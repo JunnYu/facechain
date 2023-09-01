@@ -16,7 +16,7 @@ When generating images with WebUI, etc., merge the learned LoRA model with the l
 
 Use train_network.py.
 
-You can learn both the DreamBooth method (using identifiers (sks, etc.) and classes, optionally regularized images) and the fine tuning method using captions.
+You can learn both the DreamBooth method (using identifiers (<fcsks>, etc.) and classes, optionally regularized images) and the fine tuning method using captions.
 
 Both methods can be learned in much the same way as existing scripts. We will discuss the differences later.
 

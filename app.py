@@ -94,6 +94,7 @@ def train_lora_fn(base_model_path=None, revision=None, sub_path=None, output_img
     max_train_epochs = 10
     text_encoder_lr = 5e-5
     unet_lr = 1e-4
+
     train_cmd = f'''
         cd lora_code && python "./train_network.py" --enable_bucket \
             --min_bucket_reso=256 --max_bucket_reso=2048 \
@@ -104,7 +105,7 @@ def train_lora_fn(base_model_path=None, revision=None, sub_path=None, output_img
             --network_args rank_dropout="0.1" module_dropout="0.1" \
             --text_encoder_lr={text_encoder_lr} --unet_lr={unet_lr} --network_dim={lora_r} \
             --gradient_accumulation_steps=1 --output_name="Standard-Adamw" \
-            --lr_scheduler_num_cycles="10" --scale_weight_norms="1" --network_dropout="0.1" \
+            --lr_scheduler_num_cycles="{max_train_epochs}" --scale_weight_norms="1" --network_dropout="0.1" \
             --learning_rate="0.0001" --lr_scheduler="cosine_with_restarts" --train_batch_size="{train_batch_size}" \
             --max_train_epochs="{max_train_epochs}" --save_every_n_epochs="{save_every_n_epochs}" \
             --mixed_precision="no" --save_precision="fp16" --seed="1234" \
@@ -513,7 +514,7 @@ def train_input():
 
         with gr.Box():
             with gr.Row():
-                # ensemble = gr.Checkbox(label='人物LoRA融合（Ensemble）', value=False)
+                ensemble = gr.Checkbox(label='人物LoRA融合（Ensemble）', value=False, visible=False)
                 enhance_lora = gr.Checkbox(label='LoRA增强（LoRA-Enhancement）', value=False)
             gr.Markdown(
                 # - 人物LoRA融合（Ensemble）：选择训练中几个最佳人物LoRA融合。提升相似度或在艺术照生成模式下建议勾选 - Allow fusion of multiple LoRAs during training. Recommended for enhanced-similarity or using with Inpaint mode.
@@ -546,7 +547,6 @@ def train_input():
                                 inputs=[base_model_index],
                                 outputs=[optional_styles],
                                 queue=False)
-        ensemble = False
         run_button.click(fn=trainer.run,
                          inputs=[
                              uuid,
