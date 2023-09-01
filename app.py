@@ -97,7 +97,7 @@ def train_lora_fn(base_model_path=None, revision=None, sub_path=None, output_img
     train_cmd = f'''
         cd lora_code && python "./train_network.py" --enable_bucket \
             --min_bucket_reso=256 --max_bucket_reso=2048 \
-            --pretrained_model_name_or_path="ly261666/cv_portrait_model" \
+            --pretrained_model_name_or_path={base_model_path} \
             --train_data_dir="{input_img_dir}" --resolution="512,512" \
             --output_dir="{work_dir}" --logging_dir="{work_dir}/logs" \
             --network_alpha={lora_alpha} --save_model_as=safetensors --network_module=networks.lora \
@@ -113,7 +113,7 @@ def train_lora_fn(base_model_path=None, revision=None, sub_path=None, output_img
             --bucket_no_upscale --multires_noise_iterations="8" --multires_noise_discount="0.2"
         '''
     print("cmd\n", train_cmd)
-    print("validation_prompt\n", validation_prompt)
+    # print("validation_prompt\n", validation_prompt)
     os.system(
         train_cmd
     )

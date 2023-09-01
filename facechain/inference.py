@@ -58,6 +58,7 @@ def data_process_fn(input_img_dir, use_data_process):
 
     output = os.path.join(str(input_img_dir) + '_labeled', "metadata.jsonl")
     
+    # NEW ADDED
     create_kohya_ss_data(input_img_dir)
 
     return output
@@ -203,7 +204,7 @@ def main_diffusion_inference(pos_prompt, neg_prompt,
         style_model_path = os.path.join(model_dir, 'zjz_mj_jiyi_small_addtxt_fromleo.safetensors')
 
     pipe = StableDiffusionPipeline.from_pretrained(base_model_path, torch_dtype=torch.float16)
-    scheduler = change_scheduler(pipe,)
+    scheduler = change_scheduler(pipe, )
     pipe.scheduler = scheduler
     lora_style_path = style_model_path
     lora_human_path = lora_model_path

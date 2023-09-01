@@ -60,7 +60,7 @@ def build_pipeline_facechain(baseline_model_path, lora_model_path, cache_model_d
         torch_dtype=weight_dtype,
     ).to("cuda")
     # Merge LoRA into pipeline
-    pipe = merge_lora(pipeline, lora_model_path, 1.2, from_safetensor=from_safetensor)
+    merge_lora(pipeline, lora_model_path, 1.2, from_safetensor=from_safetensor)
 
     # to fit some env lack of xformers
     try:
