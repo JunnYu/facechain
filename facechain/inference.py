@@ -1,6 +1,7 @@
 # Copyright (c) Alibaba, Inc. and its affiliates.
 import json
 import os
+import shutil
 
 import cv2
 import numpy as np
@@ -19,7 +20,29 @@ from transformers import pipeline as tpipeline
 from facechain.data_process.preprocessing import Blipv2
 from facechain.merge_lora import merge_lora
 
+from fastcore.all import *
 
+def read_json(input_file):
+    with open(input_file, "r") as f:
+        data = [json.loads(x) for x in f.readlines()]
+        return data
+
+
+def create_kohya_ss_data(input_img_dir, repeat=20):
+    input_img_dir = input_img_dir + "_labeled"
+    new_dir = os.path.join(input_img_dir + "_kohya_ss", f"img/{repeat}_person")
+    if os.path.exists(new_dir):
+        shutil.rmtree(new_dir)
+    shutil.copytree(input_img_dir, new_dir)
+    jsonfile = os.path.join(new_dir, "metadata.jsonl")
+    for data in read_json(jsonfile):
+        p = os.path.join(new_dir, data["file_name"].split(".")[0] + ".txt")
+        Path(p).write_text(str(data["text"]))
+    
+    os.remove(jsonfile)
+    return input_img_dir + "_kohya_ss" + "/img"
+    
+    
 def _data_process_fn_process(input_img_dir):
     Blipv2()(input_img_dir)
 
@@ -33,17 +56,28 @@ def data_process_fn(input_img_dir, use_data_process):
         _process.start()
         _process.join()
 
-    return os.path.join(str(input_img_dir) + '_labeled', "metadata.jsonl")
+    output = os.path.join(str(input_img_dir) + '_labeled', "metadata.jsonl")
+    
+    create_kohya_ss_data(input_img_dir)
+
+    return output
+
 
 
 def txt2img(pipe, pos_prompt, neg_prompt, num_images=10):
+    print("=>>>>>>>>>>>>>> pos_prompt", pos_prompt)
+    print("=>>>>>>>>>>>>>> neg_prompt", neg_prompt)
     batch_size = 5
     images_out = []
     for i in range(int(num_images / batch_size)):
         images_style = pipe(prompt=pos_prompt, height=512, width=512, guidance_scale=7, negative_prompt=neg_prompt,
                             num_inference_steps=40, num_images_per_prompt=batch_size).images
         images_out.extend(images_style)
+    os.makedirs("tmp_imgs", exist_ok=True)
+    for i,im in enumerate(images_out):
+        im.save(f"tmp_imgs/{i}.png")
     return images_out
+
 
 def img_pad(pil_file, fixed_height=512, fixed_width=512):
     w, h = pil_file.size
@@ -110,6 +144,56 @@ def get_mask(result):
     mask_rst = np.concatenate([mask_rst, mask_rst, mask_rst], axis=2)
     return mask_rst
 
+def change_scheduler(self, scheduler_type="DPM++ 2M Karras"):
+    from diffusers import (
+        DDIMScheduler,
+        DDPMScheduler,
+        DPMSolverMultistepScheduler,
+        DPMSolverSinglestepScheduler,
+        EulerDiscreteScheduler,
+        HeunDiscreteScheduler,
+        KDPM2AncestralDiscreteScheduler,
+        KDPM2DiscreteScheduler,
+        LMSDiscreteScheduler,
+        PNDMScheduler,
+        EulerAncestralDiscreteScheduler,
+    )
+    houxuan_scheduler = {
+        "DPM++ 2M": [DPMSolverMultistepScheduler, dict()],
+        "DPM++ 2M Karras": [DPMSolverMultistepScheduler, dict(use_karras_sigmas=True)],
+        "DPM++ 2M SDE": [DPMSolverMultistepScheduler, dict(algorithm_type="sde-dpmsolver++")],
+        "DPM++ 2M SDE Karras": [DPMSolverMultistepScheduler, dict(use_karras_sigmas=True, algorithm_type="sde-dpmsolver++")],
+        
+        "DPM++ SDE": [DPMSolverSinglestepScheduler, dict()],
+        "DPM++ SDE Karras": [DPMSolverSinglestepScheduler, dict(use_karras_sigmas=True)],
+        
+        "DPM2": [KDPM2DiscreteScheduler, dict()],
+        "DPM2 Karras": [KDPM2DiscreteScheduler, dict(use_karras_sigmas=True)],
+        "DPM2 a": [KDPM2AncestralDiscreteScheduler, dict()],
+        "DPM2 a Karras": [KDPM2AncestralDiscreteScheduler, dict(use_karras_sigmas=True)],
+        
+        "Euler": [EulerDiscreteScheduler, dict()],
+        "Euler a": [EulerAncestralDiscreteScheduler, dict()],
+        "Heun": [HeunDiscreteScheduler, dict()],
+        "LMS": [LMSDiscreteScheduler, dict()],
+        "LMS Karras": [LMSDiscreteScheduler, dict(use_karras_sigmas=True)],
+        
+        "DDIM" : [DDIMScheduler, dict(steps_offset=1, clip_sample=False, set_alpha_to_one=False)],
+        "PNDM" : [PNDMScheduler, dict(skip_prk_steps=True)],
+        "DDPM" : [DDPMScheduler, dict()],
+    }
+    if not hasattr(self, "orginal_scheduler_config"):
+        self.orginal_scheduler_config = self.scheduler.config
+    schedulers_data = houxuan_scheduler.get(scheduler_type, None)
+    if schedulers_data is None:
+        raise NotImplementedError(f"Unrecognized scheduler_type: {scheduler_type}, Please choose in {self.houxuan_scheduler.keys()}!")
+    scheduler_cls, scheduler_params = schedulers_data
+    scheduler = scheduler_cls.from_config(
+        self.orginal_scheduler_config,
+        **scheduler_params,
+    )
+    return scheduler
+
 def main_diffusion_inference(pos_prompt, neg_prompt,
                              input_img_dir, base_model_path, style_model_path, lora_model_path,
                              multiplier_style=0.25,
@@ -119,11 +203,14 @@ def main_diffusion_inference(pos_prompt, neg_prompt,
         style_model_path = os.path.join(model_dir, 'zjz_mj_jiyi_small_addtxt_fromleo.safetensors')
 
     pipe = StableDiffusionPipeline.from_pretrained(base_model_path, torch_dtype=torch.float16)
+    scheduler = change_scheduler(pipe,)
+    pipe.scheduler = scheduler
     lora_style_path = style_model_path
     lora_human_path = lora_model_path
+    
     pipe = merge_lora(pipe, lora_style_path, multiplier_style, from_safetensor=True)
     pipe = merge_lora(pipe, lora_human_path, multiplier_human, from_safetensor=lora_human_path.endswith('safetensors'))
-    print(f'multiplier_style:{multiplier_style}, multiplier_human:{multiplier_human}')
+    print(f'lora_human_path {lora_human_path}, multiplier_style:{multiplier_style}, multiplier_human:{multiplier_human}')
     
     train_dir = str(input_img_dir) + '_labeled'
     add_prompt_style = []
@@ -154,7 +241,7 @@ def main_diffusion_inference(pos_prompt, neg_prompt,
     attr_idx = np.argmax(cnts_trigger)
     trigger_styles = ['a boy, children, ', 'a girl, children, ', 'a handsome man, ', 'a beautiful woman, ',
                       'a mature man, ', 'a mature woman, ']
-    trigger_style = '<fcsks>, ' + trigger_styles[attr_idx]
+    trigger_style = 'sks, ' + trigger_styles[attr_idx]
     if attr_idx == 2 or attr_idx == 4:
         neg_prompt += ', children'
 
@@ -196,7 +283,7 @@ def main_diffusion_inference_pose(pose_model_path, pose_image,
     lora_style_path = style_model_path
     lora_human_path = lora_model_path
     pipe = merge_lora(pipe, lora_style_path, multiplier_style, from_safetensor=True)
-    pipe = merge_lora(pipe, lora_human_path, multiplier_human, from_safetensor=False)
+    pipe = merge_lora(pipe, lora_human_path, multiplier_human, from_safetensor=lora_human_path.endswith('safetensors'))
     print(f'multiplier_style:{multiplier_style}, multiplier_human:{multiplier_human}')
     
     train_dir = str(input_img_dir) + '_labeled'
@@ -228,7 +315,7 @@ def main_diffusion_inference_pose(pose_model_path, pose_image,
     attr_idx = np.argmax(cnts_trigger)
     trigger_styles = ['a boy, children, ', 'a girl, children, ', 'a handsome man, ', 'a beautiful woman, ',
                       'a mature man, ', 'a mature woman, ']
-    trigger_style = '<fcsks>, ' + trigger_styles[attr_idx]
+    trigger_style = 'sks, ' + trigger_styles[attr_idx]
     if attr_idx == 2 or attr_idx == 4:
         neg_prompt += ', children'
 
@@ -288,7 +375,7 @@ def main_diffusion_inference_multi(pose_model_path, pose_image,
     lora_style_path = style_model_path
     lora_human_path = lora_model_path
     pipe = merge_lora(pipe, lora_style_path, multiplier_style, from_safetensor=True)
-    pipe = merge_lora(pipe, lora_human_path, multiplier_human, from_safetensor=False)
+    pipe = merge_lora(pipe, lora_human_path, multiplier_human, from_safetensor=lora_human_path.endswith('safetensors'))
     print(f'multiplier_style:{multiplier_style}, multiplier_human:{multiplier_human}')
     
     train_dir = str(input_img_dir) + '_labeled'
@@ -320,7 +407,7 @@ def main_diffusion_inference_multi(pose_model_path, pose_image,
     attr_idx = np.argmax(cnts_trigger)
     trigger_styles = ['a boy, children, ', 'a girl, children, ', 'a handsome man, ', 'a beautiful woman, ',
                       'a mature man, ', 'a mature woman, ']
-    trigger_style = '<fcsks>, ' + trigger_styles[attr_idx]
+    trigger_style = 'sks, ' + trigger_styles[attr_idx]
     if attr_idx == 2 or attr_idx == 4:
         neg_prompt += ', children'
 

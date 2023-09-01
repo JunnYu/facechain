@@ -9,9 +9,9 @@ from torch import multiprocessing
 import cv2
 import gradio as gr
 import numpy as np
-import torch
 from glob import glob
 from modelscope import snapshot_download
+from fastcore.all import *
 
 from facechain.inference import GenPortrait
 from facechain.inference_inpaint import GenPortraitInpaint
@@ -82,39 +82,41 @@ def concatenate_images(images):
 
 
 def train_lora_fn(base_model_path=None, revision=None, sub_path=None, output_img_dir=None, work_dir=None, ensemble=True, enhance_lora=False, photo_num=0):
+    output_img_dir = os.path.abspath(output_img_dir)
+    work_dir = os.path.abspath(work_dir)
     validation_prompt, _ = get_popular_prompts(output_img_dir)
-    torch.cuda.empty_cache()
-    
-    lora_r = 4 if not enhance_lora else 128
+    lora_r = 64 if not enhance_lora else 128
     lora_alpha = 32 if not enhance_lora else 64
-    max_train_steps = min(photo_num * 200, 800)
-    if ensemble:
-        os.system(
-            f'''
-                PYTHONPATH=. accelerate launch facechain/train_text_to_image_lora.py \
-                --pretrained_model_name_or_path="{base_model_path}" \
-                --output_dataset_name="{output_img_dir}" \
-                --caption_column="text" --resolution=512 \
-                --random_flip --train_batch_size=1 --gradient_accumulation_steps=4 --max_train_steps={max_train_steps} --checkpointing_steps=100 \
-                --learning_rate=1e-04 --lr_scheduler="constant" --lr_warmup_steps=0 --seed=42 --output_dir="{work_dir}" \
-                --lora_r={lora_r} --lora_alpha={lora_alpha} \
-                --validation_prompt="{validation_prompt}" \
-                --validation_steps=100 \
-                --template_dir="resources/inpaint_template" \
-                --template_mask \
-                --merge_best_lora_based_face_id \
-                --revision="{revision}" \
-                --sub_path="{sub_path}" \
-            '''
-        )
-    else:
-        os.system(
-            f'PYTHONPATH=. accelerate launch facechain/train_text_to_image_lora.py --pretrained_model_name_or_path={base_model_path} '
-            f'--revision={revision} --sub_path={sub_path} '
-            f'--output_dataset_name={output_img_dir} --caption_column="text" --resolution=512 '
-            f'--random_flip --train_batch_size=1 --num_train_epochs=200 --checkpointing_steps=5000 '
-            f'--learning_rate=1.5e-04 --lr_scheduler="cosine" --lr_warmup_steps=0 --seed=42 --output_dir={work_dir} '
-            f'--lora_r={lora_r} --lora_alpha={lora_alpha} --lora_text_encoder_r=32 --lora_text_encoder_alpha=32 --resume_from_checkpoint="fromfacecommon"')
+    input_img_dir = output_img_dir + '_labeled_kohya_ss/img'
+
+    train_batch_size = 1
+    save_every_n_epochs = 1
+    max_train_epochs = 10
+    text_encoder_lr = 5e-5
+    unet_lr = 1e-4
+    train_cmd = f'''
+        cd lora_code && python "./train_network.py" --enable_bucket \
+            --min_bucket_reso=256 --max_bucket_reso=2048 \
+            --pretrained_model_name_or_path="ly261666/cv_portrait_model" \
+            --train_data_dir="{input_img_dir}" --resolution="512,512" \
+            --output_dir="{work_dir}" --logging_dir="{work_dir}/logs" \
+            --network_alpha={lora_alpha} --save_model_as=safetensors --network_module=networks.lora \
+            --network_args rank_dropout="0.1" module_dropout="0.1" \
+            --text_encoder_lr={text_encoder_lr} --unet_lr={unet_lr} --network_dim={lora_r} \
+            --gradient_accumulation_steps=1 --output_name="Standard-Adamw" \
+            --lr_scheduler_num_cycles="10" --scale_weight_norms="1" --network_dropout="0.1" \
+            --learning_rate="0.0001" --lr_scheduler="cosine_with_restarts" --train_batch_size="{train_batch_size}" \
+            --max_train_epochs="{max_train_epochs}" --save_every_n_epochs="{save_every_n_epochs}" \
+            --mixed_precision="no" --save_precision="fp16" --seed="1234" \
+            --cache_latents --optimizer_type="AdamW" --max_data_loader_n_workers="0" \
+            --caption_dropout_rate="0.05" --bucket_reso_steps=1 --min_snr_gamma=10 \
+            --bucket_no_upscale --multires_noise_iterations="8" --multires_noise_discount="0.2"
+        '''
+    print("cmd\n", train_cmd)
+    print("validation_prompt\n", validation_prompt)
+    os.system(
+        train_cmd
+    )
 
 def generate_pos_prompt(style_model, prompt_cloth):
     if style_model == styles[0]['name'] or style_model is None:
@@ -192,14 +194,12 @@ def launch_pipeline(uuid,
     use_face_swap = True
     use_post_process = True
     use_stylization = False
+    
+    # instance_data_dir = os.path.join('./tmp', uuid, 'training_data', base_model, Path(user_model).parent.name, "ensemble")
+    # if not os.path.exists(instance_data_dir):
+    instance_data_dir = os.path.join('./tmp', uuid, 'training_data', base_model, Path(user_model).parent.name)
 
-    instance_data_dir = os.path.join('./tmp', uuid, 'training_data', base_model, user_model)
-    lora_model_path = f'./tmp/{uuid}/{base_model}/{user_model}/ensemble'
-    if not os.path.exists(lora_model_path):
-        lora_model_path = f'./tmp/{uuid}/{base_model}/{user_model}/'
-
-    train_file = os.path.join(lora_model_path, 'pytorch_lora_weights.bin')
-    if not os.path.exists(train_file):
+    if not os.path.exists(user_model):
         raise gr.Error('您还没有进行形象定制，请先进行训练。(Training is required before inference.)')
 
 
@@ -212,7 +212,7 @@ def launch_pipeline(uuid,
 
     with ProcessPoolExecutor(max_workers=5) as executor:
         future = executor.submit(gen_portrait, instance_data_dir,
-                                            num_images, base_model, lora_model_path, sub_path, revision)
+                                            num_images, base_model, user_model, sub_path, revision)
         while not future.done():
             is_processing = future.running()
             if not is_processing:
@@ -274,19 +274,20 @@ def launch_pipeline_inpaint(uuid,
     revision = base_models[base_model_index]['revision']
     sub_path = base_models[base_model_index]['sub_path']
     output_model_name = 'personalization_lora'
-    instance_data_dir = os.path.join('./tmp', uuid, 'training_data', base_model, user_model)
+
+    instance_data_dir = os.path.join('./tmp', uuid, 'training_data', base_model, Path(user_model).parent.name)
 
     # we use ensemble model, if not exists fallback to original lora
-    lora_model_path = f'./tmp/{uuid}/{base_model}/{user_model}/ensemble/'
-    if not os.path.exists(lora_model_path):
-        lora_model_path = f'./tmp/{uuid}/{base_model}/{user_model}/'
+    # lora_model_path = f'./tmp/{uuid}/{base_model}/{user_model}/ensemble/'
+    # if not os.path.exists(lora_model_path):
+    #     lora_model_path = f'./tmp/{uuid}/{base_model}/{user_model}/'
 
     gen_portrait_inpaint = GenPortraitInpaint(crop_template=False, short_side_resize=512)
     
     cache_model_dir = snapshot_download("bubbliiiing/controlnet_helper", revision="v2.2")
 
     with ProcessPoolExecutor(max_workers=5) as executor:
-        future = executor.submit(gen_portrait_inpaint, base_model, lora_model_path, instance_data_dir, \
+        future = executor.submit(gen_portrait_inpaint, base_model, user_model, instance_data_dir, \
                                  selected_template_images, cache_model_dir, select_face_num, first_control_weight, \
                                  second_control_weight, final_fusion_ratio, use_fusion_before, use_fusion_after, \
                                  sub_path=sub_path, revision=revision)
@@ -330,8 +331,8 @@ class Trainer:
             output_model_name: str,
     ) -> str:
         # Check Cuda
-        if not torch.cuda.is_available():
-            raise gr.Error('CUDA不可用(CUDA not available)')
+        # if not torch.cuda.is_available():
+        #     raise gr.Error('CUDA不可用(CUDA not available)')
 
         # Check Instance Valid
         if instance_images is None:
@@ -423,6 +424,7 @@ def update_output_model(uuid, base_model_index):
         raise gr.Error('请选择基模型(Please select the base model)！')
 
     base_model_path = base_models[base_model_index]['model_id']
+    style_list = base_models[base_model_index]['style_list']
 
     if not uuid:
         if os.getenv("MODELSCOPE_ENVIRONMENT") == 'studio':
@@ -435,13 +437,24 @@ def update_output_model(uuid, base_model_index):
     if not os.path.exists(folder_path):
         return gr.Radio.update(choices=[]),gr.Dropdown.update(choices=style_list)
     else:
-        files = os.listdir(folder_path)
-        for file in files:
-            file_path = os.path.join(folder_path, file)
-            if os.path.isdir(folder_path):
-                file_lora_path = f"{file_path}/pytorch_lora_weights.bin"
-                if os.path.exists(file_lora_path):
-                    folder_list.append(file)
+        d = L(Path(folder_path).glob("**/*.safetensors")).sorted(reverse=True)
+        folder_list.extend(list(d))
+        # files = os.listdir(folder_path)
+        # for file in files:
+        #     file_path = os.path.join(folder_path, file)
+        #     if os.path.isdir(folder_path):
+        #         file_lora_path = f"{file_path}/pytorch_lora_weights.bin"
+        #         if os.path.exists(file_lora_path):
+        #             folder_list.append(file)
+
+        # files = os.listdir(folder_path)
+        # for file in files:
+        #     lora_model_path = Path(lora_model_path).ls().filter(lambda x: "safetensors" in str(x)).sorted(reverse=True)
+        #     if os.path.isdir(folder_path):
+        #         folder_list.extend(Path(folder_path).ls().filter(lambda x: "safetensors" in str(x)).sorted(reverse=True))
+        #         # file_lora_path = f"{file_path}/pytorch_lora_weights.bin"
+        #         # if os.path.exists(file_lora_path):
+        #         #     folder_list.append(file)
 
     return gr.Radio.update(choices=folder_list)
 
@@ -739,4 +752,4 @@ with gr.Blocks(css='style.css') as demo:
 
 if __name__ == "__main__":
     multiprocessing.set_start_method('spawn')
-    demo.queue(status_update_rate=1).launch(share=True)
+    demo.queue(status_update_rate=1).launch(share=False, server_name="0.0.0.0", server_port=8121)

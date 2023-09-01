@@ -50,7 +50,7 @@ def get_popular_prompts(train_img_dir):
     attr_idx = np.argmax(cnts_trigger)
     trigger_styles = ['a boy, children, ', 'a girl, children, ', 'a handsome man, ', 'a beautiful woman, ',
                     'a mature man, ', 'a mature woman, ']
-    trigger_style = '<fcsks>, ' + trigger_styles[attr_idx]
+    trigger_style = 'sks, ' + trigger_styles[attr_idx]
 
     if attr_idx == 2 or attr_idx == 4:
         neg_prompt += ', children'
@@ -112,7 +112,7 @@ def pad_to_square(im):
     return im
 
 
-def post_process_naive(result_list, score_gender, score_age):
+def post_process_naive_new(result_list, score_gender, score_age):
     # determine trigger word
     gender = np.argmax(score_gender)
     age = np.argmax(score_age)
@@ -167,6 +167,59 @@ def post_process_naive(result_list, score_gender, score_age):
 
     return result_list_new
 
+def post_process_naive(result_list, score_gender, score_age):
+    # determine trigger word
+    gender = np.argmax(score_gender)
+    age = np.argmax(score_age)
+    if age < 2:
+        if gender == 0:
+            tag_a_g = ['a boy', 'children']
+        else:
+            tag_a_g = ['a girl', 'children']
+    elif age > 4:
+        if gender == 0:
+            tag_a_g = ['a mature man']
+        else:
+            tag_a_g = ['a mature woman']
+    else:
+        if gender == 0:
+            tag_a_g = ['a handsome man']
+        else:
+            tag_a_g = ['a beautiful woman']
+    num_images = len(result_list)
+    cnt_girl = 0
+    cnt_boy = 0
+    result_list_new = []
+    for result in result_list:
+        result_new = []
+        result_new.extend(tag_a_g)
+        for tag in result:
+            if tag == '1girl' or tag == '1boy':
+                continue
+            if tag[-4:] == '_man':
+                continue
+            if tag[-6:] == '_woman':
+                continue
+            if tag[-5:] == '_male':
+                continue
+            elif tag[-7:] == '_female':
+                continue
+            elif (
+                    tag == 'ears' or tag == 'head' or tag == 'face' or tag == 'lips' or tag == 'mouth' or tag == '3d' or tag == 'asian' or tag == 'teeth'):
+                continue
+            elif ('eye' in tag and not 'eyewear' in tag):
+                continue
+            elif ('nose' in tag or 'body' in tag):
+                continue
+            elif tag[-5:] == '_lips':
+                continue
+            else:
+                result_new.append(tag)
+            # import pdb;pdb.set_trace()
+        # result_new.append('slim body')
+        result_list_new.append(result_new)
+
+    return result_list_new
 
 def transformation_from_points(points1, points2):
     points1 = points1.astype(np.float64)
@@ -478,7 +531,7 @@ class Blipv2():
         for i in range(len(result_list)):
             generated_text = ", ".join(result_list[i])
             print(imgs_list[i], generated_text)
-            info_dict = {"file_name": imgs_list[i], "text": "<fcsks>, " + generated_text}
+            info_dict = {"file_name": imgs_list[i], "text": "sks, " + generated_text}
             fo.write(json.dumps(info_dict) + '\n')
         fo.close()
         return out_json_name
