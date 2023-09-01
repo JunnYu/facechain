@@ -502,7 +502,7 @@ def train_input():
                     
                     gr.Markdown('''
                         - Step 1. 上传计划训练的图片，3~10张头肩照（注意：请避免图片中出现多人脸、脸部遮挡等情况，否则可能导致效果异常）
-                        - Step 2. 点击 [开始训练] ，启动形象定制化训练，约需15分钟，请耐心等待～
+                        - Step 2. 点击 [开始训练] ，启动形象定制化训练，约需30分钟，请耐心等待～
                         - Step 3. 切换至 [形象体验] ，生成你的风格照片
                         ''')
                     gr.Markdown('''
@@ -513,11 +513,11 @@ def train_input():
 
         with gr.Box():
             with gr.Row():
-                ensemble = gr.Checkbox(label='人物LoRA融合（Ensemble）', value=False)
+                # ensemble = gr.Checkbox(label='人物LoRA融合（Ensemble）', value=False)
                 enhance_lora = gr.Checkbox(label='LoRA增强（LoRA-Enhancement）', value=False)
             gr.Markdown(
+                # - 人物LoRA融合（Ensemble）：选择训练中几个最佳人物LoRA融合。提升相似度或在艺术照生成模式下建议勾选 - Allow fusion of multiple LoRAs during training. Recommended for enhanced-similarity or using with Inpaint mode.
                 '''
-                - 人物LoRA融合（Ensemble）：选择训练中几个最佳人物LoRA融合。提升相似度或在艺术照生成模式下建议勾选 - Allow fusion of multiple LoRAs during training. Recommended for enhanced-similarity or using with Inpaint mode.
                 - LoRA增强（LoRA-Enhancement）：扩大LoRA规模，生成图片更贴近用户，至少5张以上多图训练或者艺术照生成模式建议勾选 - Boost scale of LoRA to enhance output resemblance with input. Recommended for training with more than 5 pics or using with Inpaint mode. 
                 '''
             )
@@ -546,7 +546,7 @@ def train_input():
                                 inputs=[base_model_index],
                                 outputs=[optional_styles],
                                 queue=False)
-
+        ensemble = False
         run_button.click(fn=trainer.run,
                          inputs=[
                              uuid,
@@ -590,7 +590,7 @@ def inference_input():
                     prompts.append(style['cloth_name'])
 
                 cloth_style = gr.Radio(choices=prompts, value=cloth_prompt[0]['name'],
-                                       type="index", label="服装风格(Cloth style)", visible=False)
+                                       type="index", label="服装风格(Cloth style)", visible=True)
                 pmodels = []
                 for pmodel in pose_models:
                     pmodels.append(pmodel['name'])
